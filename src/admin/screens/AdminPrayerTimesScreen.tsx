@@ -1180,7 +1180,12 @@ CREATE POLICY "Allow public delete to prayer_times"
                           type="button"
                           onClick={() => {
                             setSelectedDate(itemDate);
-                            window.scrollTo({ top: 200, behavior: 'smooth' });
+                            const scrollEl = document.getElementById('admin-main-scroll');
+                            if (scrollEl) {
+                              scrollEl.scrollTo({ top: 380, behavior: 'smooth' });
+                            } else {
+                              window.scrollTo({ top: 380, behavior: 'smooth' });
+                            }
                           }}
                           className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold transition-colors cursor-pointer"
                         >
