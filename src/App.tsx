@@ -22,6 +22,7 @@ import { DailyDuaScreen } from './components/screens/DailyDuaScreen';
 import { ProfileScreen } from './components/screens/ProfileScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
 import { LostFoundScreen } from './components/screens/LostFoundScreen';
+import { IslamicCalendarScreen } from './components/screens/IslamicCalendarScreen';
 import { AdminApp } from './admin/AdminApp';
 
 const MainAppContent: React.FC = () => {
@@ -65,6 +66,9 @@ const MainAppContent: React.FC = () => {
           return <MasjidAboutScreen />;
         case 'lost_found':
           return <LostFoundScreen />;
+        case 'islamic_calendar':
+        case 'monthly_timetable':
+          return <IslamicCalendarScreen />;
         default:
           break;
       }

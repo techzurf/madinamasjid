@@ -18,7 +18,8 @@ export type OverlayScreen =
   | 'lost_found'
   | 'event_detail'
   | 'service_detail'
-  | 'monthly_timetable';
+  | 'monthly_timetable'
+  | 'islamic_calendar';
 
 export type AppLanguage = 'en' | 'ta' | 'ar';
 

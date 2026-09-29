@@ -21,6 +21,7 @@ export type CreatePrayerTimeInput = Omit<PrayerTimeRecord, 'id' | 'created_at' |
 
 const STORAGE_KEYS = {
   URL: 'mm_supabase_url',
+  PUBLISHABLE_KEY: 'mm_supabase_publishable_key',
   ANON_KEY: 'mm_supabase_anon_key',
   LOCAL_CACHE: 'mm_local_prayer_times',
 };
@@ -54,39 +55,87 @@ export function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
-// Config retrieval
-export function getSupabaseConfig(): { url: string; key: string } {
-  let envUrl = '';
-  let envKey = '';
+// ============================================================================
+// Shared Supabase Client Initialization (Vite + React)
+// ============================================================================
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
+// Safe Diagnostics (Step 4 - DO NOT expose the actual key)
+const isUrlConfigured = Boolean(
+  supabaseUrl && 
+  typeof supabaseUrl === 'string' && 
+  supabaseUrl.trim().length > 0 && 
+  supabaseUrl.startsWith('http') && 
+  !supabaseUrl.includes('your-project')
+);
+const isKeyConfigured = Boolean(
+  typeof supabasePublishableKey === 'string' && 
+  supabasePublishableKey.trim().length > 0 && 
+  !supabasePublishableKey.includes('your-supabase') &&
+  !supabasePublishableKey.includes('your-anon')
+);
+
+console.log('Supabase URL configured:', isUrlConfigured);
+console.log('Supabase publishable key configured:', isKeyConfigured);
+
+let initError: string | null = null;
+let clientInstance: SupabaseClient | null = null;
+
+if (!isUrlConfigured || !isKeyConfigured) {
+  initError = `Supabase configuration missing: ${
+    !isUrlConfigured ? 'VITE_SUPABASE_URL is not set or invalid. ' : ''
+  }${
+    !isKeyConfigured ? 'VITE_SUPABASE_PUBLISHABLE_KEY is not set or invalid. ' : ''
+  }Check environment variables.`;
+  console.warn('[Supabase]', initError);
+} else {
   try {
-    if (typeof import.meta !== 'undefined' && import.meta.env) {
-      envUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-      envKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+    clientInstance = createClient(supabaseUrl, supabasePublishableKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+      },
+    });
+    console.log('Supabase client initialized: true');
+  } catch (err: any) {
+    initError = `createClient error: ${err?.message || String(err)}`;
+    console.error('Supabase client initialized: false -', initError);
+  }
+}
+
+// Single shared Supabase client instance (Step 5)
+export const supabase: SupabaseClient | null = clientInstance;
+
+export function getSupabaseInitError(): string {
+  if (initError) return initError;
+  if (!supabase) return 'Supabase client is not connected. Missing or invalid VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.';
+  return '';
+}
+
+// Config retrieval (supports UI-configured overrides in Admin settings)
+export function getSupabaseConfig(): { url: string; key: string } {
+  let url = (supabaseUrl || '').trim();
+  let key = (supabasePublishableKey || '').trim();
+
+  if (!url || !key) {
+    if (typeof window !== 'undefined') {
+      const storedUrl = (localStorage.getItem(STORAGE_KEYS.URL) || '').trim();
+      const storedKey = (
+        localStorage.getItem(STORAGE_KEYS.PUBLISHABLE_KEY) || 
+        localStorage.getItem(STORAGE_KEYS.ANON_KEY) || 
+        ''
+      ).trim();
+      if (!url) url = storedUrl;
+      if (!key) key = storedKey;
     }
-  } catch {
-    // Ignore in non-Vite environments
   }
-
-  if (!envUrl && typeof process !== 'undefined' && process.env) {
-    envUrl = (process.env.VITE_SUPABASE_URL || '').trim();
-    envKey = (process.env.VITE_SUPABASE_ANON_KEY || '').trim();
-  }
-
-  let storedUrl = '';
-  let storedKey = '';
-  if (typeof window !== 'undefined') {
-    storedUrl = (localStorage.getItem(STORAGE_KEYS.URL) || '').trim();
-    storedKey = (localStorage.getItem(STORAGE_KEYS.ANON_KEY) || '').trim();
-  }
-
-  const url = envUrl || storedUrl;
-  const key = envKey || storedKey;
 
   return { url, key };
 }
 
 export function isSupabaseConfigured(): boolean {
+  if (supabase) return true;
   const { url, key } = getSupabaseConfig();
   return Boolean(url && key && url.startsWith('http') && !url.includes('your-project'));
 }
@@ -94,6 +143,7 @@ export function isSupabaseConfigured(): boolean {
 export function saveSupabaseConfig(url: string, key: string) {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEYS.URL, url.trim());
+    localStorage.setItem(STORAGE_KEYS.PUBLISHABLE_KEY, key.trim());
     localStorage.setItem(STORAGE_KEYS.ANON_KEY, key.trim());
     // Invalidate client singleton
     cachedClient = null;
@@ -105,6 +155,8 @@ let lastUsedUrl = '';
 let lastUsedKey = '';
 
 export function getSupabaseClient(): SupabaseClient | null {
+  if (supabase) return supabase;
+
   const { url, key } = getSupabaseConfig();
   if (!url || !key || !url.startsWith('http') || url.includes('your-project')) {
     return null;
@@ -124,8 +176,8 @@ export function getSupabaseClient(): SupabaseClient | null {
     lastUsedUrl = url;
     lastUsedKey = key;
     return cachedClient;
-  } catch (err) {
-    console.error('Failed to initialize Supabase client:', err);
+  } catch (err: any) {
+    console.error('[Supabase] Failed to initialize Supabase client:', err);
     return null;
   }
 }
@@ -200,7 +252,7 @@ export async function fetchPrayerTimesForDate(dateStr: string, allowFallback: bo
 
   if (!client) {
     if (!allowFallback) {
-      return { data: null, error: 'Supabase client is not connected. Check environment variables.', isDemo: false };
+      return { data: null, error: getSupabaseInitError(), isDemo: false };
     }
     const store = getLocalStore();
     const existing = store[dateStr] || (dateStr === getTodayDateString() ? getInitialSeedRecord(dateStr) : null);
@@ -269,7 +321,7 @@ export async function fetchAllPrayerTimes(limit = 40, allowFallback: boolean = t
 
   if (!client) {
     if (!allowFallback) {
-      return { data: [], error: 'Supabase client is not connected.', isDemo: false };
+      return { data: [], error: getSupabaseInitError(), isDemo: false };
     }
     const store = getLocalStore();
     let records = Object.values(store);
@@ -388,7 +440,7 @@ export async function savePrayerTimes(record: {
 
   if (!client) {
     if (!allowFallback) {
-      return { data: null, error: 'Supabase client is not connected. Check environment variables.', isDemo: false };
+      return { data: null, error: getSupabaseInitError(), isDemo: false };
     }
     // Save to local cache
     const store = getLocalStore();
@@ -614,7 +666,7 @@ export async function testSupabaseConnection(): Promise<{
     return {
       connected: false,
       tableExists: false,
-      message: 'Supabase URL or Anon Key is missing or invalid.',
+      message: getSupabaseInitError() || 'Supabase URL or Publishable Key is missing or invalid.',
     };
   }
 
@@ -961,7 +1013,7 @@ export async function createCommunityMember(input: CreateCommunityMemberInput): 
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { data: null, error: 'Supabase client is not connected. Check environment variables.' };
+    return { data: null, error: getSupabaseInitError() };
   }
 
   try {
@@ -1016,7 +1068,7 @@ export async function fetchCommunityMembers(): Promise<{
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { data: [], error: 'Supabase client is not connected. Check environment variables.' };
+    return { data: [], error: getSupabaseInitError() };
   }
 
   try {
@@ -1049,7 +1101,7 @@ export async function updateCommunityMember(
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { data: null, error: 'Supabase client is not connected. Check environment variables.' };
+    return { data: null, error: getSupabaseInitError() };
   }
 
   try {
@@ -1098,7 +1150,7 @@ export async function deleteCommunityMember(id: string): Promise<{
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { success: false, error: 'Supabase client is not connected. Check environment variables.' };
+    return { success: false, error: getSupabaseInitError() };
   }
 
   try {
@@ -1190,7 +1242,7 @@ export async function fetchHighestPriorityActiveNotice(): Promise<{
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { data: null, error: 'Supabase client not connected.' };
+    return { data: null, error: getSupabaseInitError() };
   }
 
   try {
@@ -1223,7 +1275,7 @@ export async function fetchAllNoticesAdmin(): Promise<{
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { data: [], error: 'Supabase client not connected.' };
+    return { data: [], error: getSupabaseInitError() };
   }
 
   try {
@@ -1253,7 +1305,7 @@ export async function createMasjidNotice(input: CreateMasjidNoticeInput): Promis
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { data: null, error: 'Supabase client not connected.' };
+    return { data: null, error: getSupabaseInitError() };
   }
 
   try {
@@ -1295,7 +1347,7 @@ export async function updateMasjidNotice(
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { data: null, error: 'Supabase client not connected.' };
+    return { data: null, error: getSupabaseInitError() };
   }
 
   try {
@@ -1338,7 +1390,7 @@ export async function deleteMasjidNotice(id: string): Promise<{
 }> {
   const client = getSupabaseClient();
   if (!client) {
-    return { success: false, error: 'Supabase client not connected.' };
+    return { success: false, error: getSupabaseInitError() };
   }
 
   try {

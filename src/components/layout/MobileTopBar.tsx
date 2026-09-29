@@ -46,7 +46,8 @@ export const MobileTopBar: React.FC<MobileTopBarProps> = ({
       case 'lost_found': return 'Lost & Found';
       case 'event_detail': return 'Event Details';
       case 'service_detail': return 'Service Details';
-      case 'monthly_timetable': return 'Monthly Prayer Timetable';
+      case 'monthly_timetable':
+      case 'islamic_calendar': return 'Islamic Calendar';
       default: return title || 'Madina Masjid MKB Nagar';
     }
   };

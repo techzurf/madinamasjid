@@ -1222,7 +1222,7 @@ CREATE POLICY "Allow public delete to prayer_times"
               <div className="p-3 rounded-2xl bg-emerald-50 text-emerald-900 border border-emerald-200 flex items-start gap-2">
                 <Info className="w-4 h-4 text-[#087F5B] shrink-0 mt-0.5" />
                 <p>
-                  You can set these via <code className="font-mono font-bold">VITE_SUPABASE_URL</code> and <code className="font-mono font-bold">VITE_SUPABASE_ANON_KEY</code> in your <code className="font-mono">.env</code> file, or configure them directly here for instant browser connection.
+                  You can set these via <code className="font-mono font-bold">VITE_SUPABASE_URL</code> and <code className="font-mono font-bold">VITE_SUPABASE_PUBLISHABLE_KEY</code> in your <code className="font-mono">.env</code> file, or configure them directly here for instant browser connection.
                 </p>
               </div>
 
